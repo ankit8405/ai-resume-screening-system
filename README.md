@@ -8,4 +8,4 @@ Features:
 - Missing skill detection
 
 Tech Stack:
-FastAPI, Streamlit, Scikit-learn
+FastAPI, Streamlit, Pandas, Sentence Transformers
