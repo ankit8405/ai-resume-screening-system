@@ -68,5 +68,4 @@ Model in use: **`gemini-3.6-flash`** (set in `app.py`).
 
 - Only the **first page** of the uploaded PDF is analyzed (`first_page=1, last_page=1`).
 - Gemini model names change over time — a 404 means the model was retired; update `MODEL`.
-- Errors (missing key, unreadable PDF, API/quota failures) appear as friendly messages in the UI
-  instead of raw tracebacks.
+- Errors (missing key, unreadable PDF, API/quota failures) appear as friendly messages in the UI instead of raw tracebacks.

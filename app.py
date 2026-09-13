@@ -16,6 +16,7 @@ from pdf2image.exceptions import (
 load_dotenv()
 
 MODEL = "gemini-3.6-flash"
+MAX_PAGES = 2
 
 _client: genai.Client | None = None
 
@@ -34,6 +35,19 @@ def get_client() -> genai.Client:
     return _client
 
 
+def _pdf_call(func, *args, **kwargs):
+    try:
+        return func(*args, **kwargs)
+    except PopplerNotInstalledError as err:
+        raise AppError(
+            "Can't read PDFs — poppler is not installed. On macOS run: brew install poppler"
+        ) from err
+    except (PDFPageCountError, PDFSyntaxError) as err:
+        raise AppError("Can't read the PDF — it may be corrupted or password-protected.") from err
+    except Exception as err:
+        raise AppError(f"Can't read the PDF: {err}") from err
+
+
 def _friendly_api_error(err: genai_errors.APIError) -> str:
     code = getattr(err, "code", None)
     if code == 404:
@@ -47,11 +61,13 @@ def _friendly_api_error(err: genai_errors.APIError) -> str:
     return f"Gemini request failed: {err}"
 
 
-def get_gemini_response(instruction: str, resume_image: types.Part, job_description: str) -> str:
+def get_gemini_response(
+    instruction: str, resume_pages: list[types.Part], job_description: str
+) -> str:
     try:
         response = get_client().models.generate_content(
             model=MODEL,
-            contents=[instruction, resume_image, job_description],
+            contents=[instruction, *resume_pages, job_description],
         )
     except genai_errors.APIError as err:
         raise AppError(_friendly_api_error(err)) from err
@@ -64,25 +80,28 @@ def get_gemini_response(instruction: str, resume_image: types.Part, job_descript
     return "(No response — the prompt was blocked by safety filters.)"
 
 
-def input_pdf_setup(uploaded_file) -> types.Part:
+def input_pdf_setup(uploaded_file) -> list[types.Part]:
     if uploaded_file is None:
         raise AppError("No file uploaded.")
 
-    try:
-        images = pdf2image.convert_from_bytes(uploaded_file.read(), first_page=1, last_page=1)
-    except PopplerNotInstalledError as err:
-        raise AppError(
-            "Can't read PDFs — poppler is not installed. On macOS run: brew install poppler"
-        ) from err
-    except (PDFPageCountError, PDFSyntaxError) as err:
-        raise AppError("Can't read the PDF — it may be corrupted or password-protected.") from err
-    except Exception as err:
-        raise AppError(f"Can't read the PDF: {err}") from err
+    pdf_bytes = uploaded_file.read()
+    info = _pdf_call(pdf2image.pdfinfo_from_bytes, pdf_bytes)
+    page_count = int(info.get("Pages", 1))
 
-    first_page = images[0]
-    img_byte_arr = io.BytesIO()
-    first_page.save(img_byte_arr, format="JPEG")
-    return types.Part.from_bytes(data=img_byte_arr.getvalue(), mime_type="image/jpeg")
+    if page_count > MAX_PAGES:
+        raise AppError(
+            f"This resume is {page_count} pages long. Please upload a shorter resume "
+            f"of at most {MAX_PAGES} pages."
+        )
+
+    images = _pdf_call(pdf2image.convert_from_bytes, pdf_bytes, last_page=MAX_PAGES)
+
+    pages = []
+    for image in images:
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG")
+        pages.append(types.Part.from_bytes(data=buffer.getvalue(), mime_type="image/jpeg"))
+    return pages
 
 
 INPUT_PROMPT1 = """
@@ -91,7 +110,7 @@ INPUT_PROMPT1 = """
  Highlight the strengths and weaknesses of the applicant in relation to the specified job requirements.
 """
 
-INPUT_PROMPT2 = """
+INPUT_PROMPT3 = """
 You are an skilled ATS (Applicant Tracking System) scanner with a deep understanding of data science and ATS functionality,
 your task is to evaluate the resume against the provided job description. give me the percentage of match if the resume matches
 the job description. First the output should come as percentage and then keywords missing and last final thoughts.
@@ -115,7 +134,7 @@ def main() -> None:
     submit1 = st.button("Tell Me About the Resume")
     submit3 = st.button("Percentage match")
 
-    instruction = INPUT_PROMPT1 if submit1 else INPUT_PROMPT2 if submit3 else None
+    instruction = INPUT_PROMPT1 if submit1 else INPUT_PROMPT3 if submit3 else None
     if instruction is None:
         return
 
@@ -128,8 +147,8 @@ def main() -> None:
 
     try:
         with st.spinner("Analyzing resume..."):
-            resume = input_pdf_setup(uploaded_file)
-            response = get_gemini_response(instruction, resume, job_description)
+            resume_pages = input_pdf_setup(uploaded_file)
+            response = get_gemini_response(instruction, resume_pages, job_description)
     except AppError as err:
         st.error(str(err))
         return
