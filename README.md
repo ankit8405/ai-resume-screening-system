@@ -12,16 +12,15 @@ description — like an Applicant Tracking System (ATS) scanner.
      aligns with the role, plus their strengths and weaknesses.
    - **Percentage match** — an ATS-style score: percentage match, missing keywords, and final thoughts.
 
-The first page of the resume PDF is rendered to an image and sent to Gemini together with the job description.
+The resume PDF's pages are rendered to images and sent to Gemini together with the job description — up to **2 pages**. Longer resumes are rejected with a message asking for a shorter version.
 
 ## Tech stack
 
 | Layer | Tool |
 |---|---|
 | UI | Streamlit |
-| LLM | Google Gemini via `google-genai` |
+| LLM | Google Gemini API |
 | PDF → image | `pdf2image` (requires the **poppler** system binary) |
-| Config | `python-dotenv` |
 
 Model in use: **`gemini-3.6-flash`** (set in `app.py`).
 
@@ -63,9 +62,10 @@ Model in use: **`gemini-3.6-flash`** (set in `app.py`).
 - **`GOOGLE_API_KEY`** — read from `.env` (required).
 - **`MODEL`** — in `app.py`, defaults to `gemini-3.6-flash`. If Google retires it you'll get a 404;
   update this constant (e.g. to `gemini-flash-latest`).
+- **`MAX_PAGES`** — in `app.py`, the maximum number of resume pages analyzed (default `2`).
 
 ## Notes & limitations
 
-- Only the **first page** of the uploaded PDF is analyzed (`first_page=1, last_page=1`).
+- Up to **2 pages** of the resume are analyzed. Longer PDFs are rejected with a message asking for a resume of at most 2 pages.
 - Gemini model names change over time — a 404 means the model was retired; update `MODEL`.
 - Errors (missing key, unreadable PDF, API/quota failures) appear as friendly messages in the UI instead of raw tracebacks.
