@@ -1,9 +1,4 @@
-fastapi
-uvicorn
 streamlit
-requests
-pdfplumber
-pandas
-scikit-learn
-python-multipart
-sentence-transformers
+google-genai
+python-dotenv
+pdf2image
