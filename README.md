@@ -1,4 +1,4 @@
-# ATS Resume Expert
+# ATS Resume Screening System
 
 A Streamlit web app that uses **Google Gemini (vision)** to evaluate a resume against a job
 description — like an Applicant Tracking System (ATS) scanner.
